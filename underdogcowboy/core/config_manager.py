@@ -27,7 +27,7 @@ class LLMConfigManager:
         self.models: Dict[str, Dict[str, Dict[str, Any]]] = {
             'anthropic': {
                 'api_key': {'question': 'Enter your Anthropic API key:', 'input_type': 'password'},
-                'model_id': {'question': 'Enter the Anthropic model ID:', 'input_type': 'text', 'default': 'claude-3-5-sonnet-20240620a'},
+                'model_id': {'question': 'Enter the Anthropic model ID:', 'input_type': 'text', 'default': 'claude-3-5-sonnet-20240620'},
                 'api_url': {'question': 'Enter the Anthropic API URL:', 'input_type': 'text', 'default': 'https://api.anthropic.com/v1/messages'},
                 'anthropic_version': {'question': 'Enter the Anthropic API version:', 'input_type': 'text', 'default': '2023-06-01'}
             },

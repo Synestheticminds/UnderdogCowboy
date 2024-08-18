@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "underdogcowboy"
-version = "0.1.12"
+version = "0.1.12.1"
 description = "Underdog Cowboy (UC): Wrangle Your LLMs with a Smile"
 readme = "README.md"
 requires-python = ">=3.7"
