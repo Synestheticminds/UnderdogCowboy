@@ -27,3 +27,5 @@ Timeline_Editor_SA_IAM.json
 /underdogcowboy/core/specializedagents/__pycache__
 tests/__pycache__/tracing_config.cpython-311.pyc
 *.pyc
+/state_machine_visualizations
+/venv
