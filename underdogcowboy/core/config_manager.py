@@ -100,8 +100,52 @@ class LLMConfigManager:
             'langsmith_api_key': {'question': 'Enter your LangSmith API key:', 'input_type': 'password'},
         }
 
+        # Add this to the __init__ method in the LLMConfigManager class
+        self.interactive_storage_layer: Dict[str, Dict[str, Any]] = {
+            'api_key': {
+                'question': 'Enter your GitHub API key:',
+                'input_type': 'password'
+            }
+        }
+
+
         self.migrate_config()
+        self.get_github_config()
         self.get_general_config()  
+
+    def get_github_config(self) -> Dict[str, Any]:
+        """
+        Retrieve or prompt for GitHub configuration settings.
+
+        Returns:
+            dict: A dictionary containing the GitHub configuration settings.
+        """
+        if 'github' not in self.config:
+            self.config['github'] = {}
+
+        updated = False
+
+        # Check if the GitHub API key is stored securely
+        if self.use_key_ring:
+            api_key = keyring.get_password("underdogcowboy", "github_api_key")
+            if not api_key:
+                print("GitHub API key is missing. Please enter it now.")
+                api_key = getpass("Enter your GitHub API key: ")
+                keyring.set_password("underdogcowboy", "github_api_key", api_key)
+                self.config['github']['api_key'] = "KEYRING_STORED"
+                updated = True
+        else:
+            if 'api_key' not in self.config['github']:
+                print("GitHub API key is missing. Please enter it now.")
+                api_key = getpass("Enter your GitHub API key: ")
+                self.config['github']['api_key'] = api_key
+                updated = True
+
+        if updated:
+            self.save_config()
+
+        return self.config['github']
+
 
     def get_provider_from_model(self, model_name: str) -> str:
         """
@@ -249,61 +293,6 @@ class LLMConfigManager:
         credentials['provider'] = provider
         return credentials        
     
-    def __bck__get_credentials(self, provider: str) -> Dict[str, Any]:
-        if ':' in provider:
-            provider, model_id = provider.split(':', 1)
-        else:
-            model_id = None
-
-        if provider not in self.config or not self.config[provider].get('configured', False):
-            print(f"No stored credentials found for {provider}. Please enter them now.")
-            self.config[provider] = {}
-            for prop, details in self.models[provider].items():
-                if prop != 'models':
-                    if details['input_type'] == 'password':
-                        value = getpass(details['question'])
-                        keyring.set_password("underdogcowboy", f"{provider}_{prop}", value)
-                        self.config[provider][prop] = "KEYRING_STORED"
-                    else:
-                        value = input(f"{details['question']} (default: {details.get('default', 'N/A')}): ")
-                        if not value and 'default' in details:
-                            value = details['default']
-                        self.config[provider][prop] = value
-            
-            if not model_id:
-                # Model selection
-                print(f"Available models for {provider}:")
-                for i, model in enumerate(self.models[provider]['models'], 1):
-                    print(f"{i}. {model['name']} ({model['id']})")
-                while True:
-                    try:
-                        choice = int(input("Select a model (enter the number): "))
-                        if 1 <= choice <= len(self.models[provider]['models']):
-                            selected_model = self.models[provider]['models'][choice - 1]
-                            model_id = selected_model['id']
-                            break
-                        else:
-                            print("Invalid choice. Please try again.")
-                    except ValueError:
-                        print("Please enter a valid number.")
-            
-            self.config[provider]['selected_model'] = model_id
-            self.config[provider]['configured'] = True
-            self.save_config()
-
-        credentials = {}
-        for prop, details in self.models[provider].items():
-            if prop != 'models':
-                if details['input_type'] == 'password':
-                    value = keyring.get_password("underdogcowboy", f"{provider}_{prop}")
-                else:
-                    value = self.config[provider].get(prop)
-                if not value and 'default' in details:
-                    value = details['default']
-                credentials[prop] = value
-        
-        credentials['model_id'] = model_id or self.config[provider]['selected_model']
-        return credentials
 
     def get_general_config(self) -> Dict[str, Any]:
         """
@@ -383,13 +372,7 @@ class LLMConfigManager:
             except ValueError:
                 print("Please enter a valid number.")
 
-    def __bck__get_available_models(self) -> List[str]:
-        available_models = []
-        for provider, details in self.models.items():
-            for model in details['models']:
-                available_models.append(f"{provider}:{model['id']}")
-        return sorted(available_models)        
-    
+
     def get_available_models(self) -> List[str]:
         available_models = []
         for provider, details in self.models.items():

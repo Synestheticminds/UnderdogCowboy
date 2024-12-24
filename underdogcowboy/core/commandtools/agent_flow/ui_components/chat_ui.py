@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import os
 import json
 import datetime
@@ -32,6 +33,10 @@ from underdogcowboy.core.config_manager import LLMConfigManager
 from underdogcowboy.core.timeline_editor import Timeline, CommandProcessor
 from underdogcowboy.core.dialog_manager import AgentDialogManager
 from underdogcowboy.core.model import ModelManager, ConfigurableModel
+
+# uc interactive storage layer
+from underdogcowboy.core.interactive_storage_layer.github import GithubAPI
+from underdogcowboy.core.interactive_storage_layer.queue import TaskQueueManager
 
 renderer = LLMResponseRenderer(
     mdformat_config_path=None,  
@@ -68,6 +73,7 @@ class ChatUI(Static):
         super().__init__()
         
         self.processor: Optional[Union[AgentDialogManager, CommandProcessor]] = processor
+        self.task_queue_manager = TaskQueueManager()
         self.da_name = name
         self.loading_message_id = None  
         self.is_scroll_at_bottom = True 
@@ -108,9 +114,8 @@ class ChatUI(Static):
 
     def _get_model_and_timeline(self) -> Tuple[ConfigurableModel, Timeline]:
         self.model_id = self.app.get_current_llm_config()["model_id"]
-
-        # TODO: Hard Coded default provider.
-        model = ModelManager.initialize_model_with_id("anthropic", self.model_id)
+        self.provider = self.app.get_current_llm_config()["provider"]
+        model = ModelManager.initialize_model_with_id(self.provider, self.model_id)
         timeline = Timeline()
         return model, timeline
 
@@ -319,9 +324,9 @@ class ChatUI(Static):
         self.enable_input()
 
     @on(CommandSubmitted)
-    def handle_command_submission(self, event: CommandSubmitted):
-        command_parts = event.command.lower().split()
-        base_command = command_parts[0]
+    async def handle_command_submission(self, event: CommandSubmitted):
+        command_parts = event.command.split()
+        base_command = command_parts[0].lower()
 
         if base_command == '/markdown':
             offset = 0
@@ -347,8 +352,57 @@ class ChatUI(Static):
                 folder_path = ' '.join(command_parts[2:])
                 self.set_folder_alias(alias, folder_path)
         
+        elif base_command == "/issue":
+            if len(command_parts) < 2:
+                self.app.notify("Usage: /issue [repository_name]")
+            else:
+                repo_name = command_parts[1]
+                github_api = await self.create_github_api()
+                
+                # Notify the user the issue is being processed
+                self.app.notify(f"Creating issue for repository: {repo_name} in the background...")
+
+                async def create_issue_task():
+                    repositories = await github_api.get_repositories()
+                    for repo in repositories:
+                        if repo['name'] == repo_name:  # Assuming `repo` is a dictionary
+                            # Add issue creation task to queue
+                            self.task_queue_manager.add_task("create_issue", repo['full_name'], {
+                                "title": "Bug Report",
+                                "body": "Description of the bug.",
+                                "labels": ["bug"]
+                            })
+                            await self.task_queue_manager.process_queue()
+                            self.app.notify(f"Issue successfully created in repository: {repo_name}")
+                            break
+                    else:
+                        self.app.notify(f"Repository '{repo_name}' not found.")
+
+                # Schedule the async task
+                asyncio.create_task(create_issue_task())
+                
+        elif base_command == 'summarize':
+            # simple ADM call with current agents as a json text file to a summarize agent.
+            # get response and place
+            # in a markdown file that we save in a project/[session]/[agent_name][utc].md 
+
+            # make summarize agent and place in meta folder of agents
+            # from underdogcowboy import adm , summarize
+            #adm | [summarize]
+            #file_ref = # path via something like the agent_name?
+            #question = f"file {file_ref} "
+            #response = summarize >> question
+            
+            pass
+
         else:
             self.app.notify("Unknown command")
+
+    async def create_github_api(self) -> GithubAPI:
+        config_manager = LLMConfigManager()
+        github_config = config_manager.get_github_config()
+        api_key = github_config['api_key']
+        return GithubAPI(api_key)
 
     def set_folder_alias(self, alias: str, folder_path: str):
         """Set a folder alias in the YAML file."""

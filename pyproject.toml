@@ -13,6 +13,8 @@ license = {text = "MIT"}
 dependencies = [
     "vertexai",
     "flask",
+    "aiohttp",
+    "aiofiles",
     "prompt_toolkit", 
     "python-dotenv",
     "keyring",
